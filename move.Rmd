@@ -1,0 +1,81 @@
+---
+title: "Move"
+author: "Ivan"
+date: "August 18, 2015"
+output: html_document
+---
+```{r}
+library(caret)
+set.seed(123)
+```
+
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+```
+
+```{r, cache=TRUE}
+trainingFile <- read.csv("pml-training.csv")
+dim(trainingFile)
+
+testingFile <- read.csv("pml-testing.csv")
+dim(testingFile)
+```
+
+```{r, cache=TRUE}
+nzv <- nearZeroVar(trainingFile)
+length(nzv)
+nzv <- nearZeroVar(testingFile)
+length(nzv)
+```
+
+```{r, cache=TRUE}
+# drop Xs from training 
+trainingFile <- trainingFile[,-1]
+testingFile <- testingFile[,-1]
+
+# drop near zero vars, columns are the same in both datasets
+trainingFile <- trainingFile[,-nzv]
+testingFile <- testingFile[,-nzv]
+
+populatedCols <- colnames(testingFile)[colSums(is.na(testingFile))<nrow(testingFile)]
+
+# training has classe, testing has problem id, so we adjust for that here
+trainingFile <- trainingFile[,c(populatedCols[-51], "classe")]
+dim(trainingFile)
+testingFile <- testingFile[,populatedCols]
+dim(testingFile)
+```
+
+```{r, cache=TRUE}
+idxTrain <- createDataPartition(trainingFile$classe, p=0.6, list=F)
+training <- trainingFile[idxTrain,]
+testing <- trainingFile[-idxTrain,]
+```
+
+My benchmark. We can guess with 28% probability just by picking the most widespread class
+```{r}
+max(table(testing$classe)/length(testing$classe))
+```
+
+# this takes like 40 mins on my Mac so let's cache it
+```{r, cache=TRUE}
+model <- train(classe ~ ., training, method="rf", trControl = trainControl(method="cv", number=10))
+summary(model)
+```
+
+Estimated error is 99%. Out of sample accuracy is 99%
+```{r}
+sum(predict(model, na.omit(testing)) == na.omit(testing)$classe)/length(na.omit(testing)$classe)
+```
+
+Let's try our luck with the submission (accuracy is 100% here)
+```{r}
+answers <- predict(model, testingFile)
+pml_write_files(answers)
+```
